@@ -13,8 +13,6 @@ from utils import set_params
 import math
 from argparse import Namespace
 from SSMs import DWN, DWNConfig
-from scan_utils import associative_scan, binary_operator_diag
-import torch.jit as jit
 #from tqdm import tqdm
 
 seed = 2
@@ -26,7 +24,7 @@ cfg = {
     "n_y": 4,
     "d_model": 5,
     "d_state": 5,
-    "n_layers": 1,
+    "n_layers": 3,
     "ff": "LMLP",  # GLU | MLP | LMLP
     "max_phase": math.pi,
     "r_min": 0.7,
@@ -88,7 +86,7 @@ for epoch in range(epochs):
     loss = 0  # Initialize loss
 
     # Forward pass through the SSM
-    ySSM = Qg(u, state=None, mode="scan")
+    ySSM, _ = Qg(u, state=None, mode="scan")
     ySSM = torch.squeeze(ySSM)  # Remove unnecessary dimensions
 
     # Calculate the mean squared error loss
@@ -114,7 +112,7 @@ yval = output_data[num_training:, :, :]
 
 
 # Forward pass through the SSM for validation data
-ySSM_val = Qg(uval, state=None, mode="scan")
+ySSM_val, _ = Qg(uval, state=None, mode="scan")
 yval = torch.squeeze(yval)
 
 # Compute validation loss

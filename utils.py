@@ -19,8 +19,8 @@ def set_params():
     Kd = torch.tensor([[4, 0.0], [0.0, 4]])
 
     #Dataset
-    duration = 100
-    num_signals = 100
+    duration = 50
+    num_signals = 10
     num_training = int(num_signals * 4 / 5)
     num_validation = num_signals - num_training
 

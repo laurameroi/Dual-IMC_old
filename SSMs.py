@@ -2,8 +2,9 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import math
-import torch.jit as jit
 from dataclasses import dataclass
+from scan_utils import associative_scan, binary_operator_diag
+import torch.jit as jit
 
 #MLPs
 
@@ -345,7 +346,7 @@ class LRU_Robust(jit.ScriptModule):
         states = torch.stack(states, 1)
         output = states @ C.mT + input @ D.T
 
-        return output
+        return output, states
 
 #overall SSM
 
@@ -461,7 +462,7 @@ class DWNBlock(nn.Module):
         z = x
         #  z = self.ln(z)  # prenorm
 
-        z = self.lru(z, gamma, state, mode)
+        z, state = self.lru(z, gamma, state, mode)
 
         z = self.ff(z)  # MLP, GLU or LMLP
         z = self.dropout(z)
@@ -469,7 +470,7 @@ class DWNBlock(nn.Module):
         # Residual connection
         x = z + x
 
-        return x
+        return x, state
 
 
 class DWN(nn.Module):
@@ -507,27 +508,27 @@ class DWN(nn.Module):
         x = u@encoder
         for layer, block in enumerate(self.blocks):
             state_block = state[layer] if state is not None else None
-            x = block(x, gamma_mid[layer]-1, state=state_block, mode=mode)
+            x, state_block = block(x, gamma_mid[layer]-1, state=state_block, mode=mode)
         x = x@decoder
 
-        return x
+        return x, state
 
     def forward_trainable_gamma(self, u, state=None, mode="scan"):
 
         x = self.encoder(u)
         for layer, block in enumerate(self.blocks):
             state_block = state[layer] if state is not None else None
-            x = block(x, state=state_block, mode=mode)
+            x, state_block = block(x, state=state_block, mode=mode)
         x = self.decoder(x)
 
-        return x
+        return x, state
 
 
     def forward(self, u, state=None, mode="scan"):
 
         if not self.config.trainable:
-            x = self.forward_fixed_gamma(u, state, mode)
+            x, state = self.forward_fixed_gamma(u, state, mode)
         else:
-            x = self.forward_trainable_gamma(u, state, mode)
+            x, state = self.forward_trainable_gamma(u, state, mode)
 
         return x, state

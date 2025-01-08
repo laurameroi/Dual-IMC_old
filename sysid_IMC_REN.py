@@ -2,49 +2,19 @@ import torch
 from torch import nn
 import numpy as np
 import matplotlib.pyplot as plt
-from models import PointMassVehicle
+from models import PointMassVehicle, PsiU
 from dataset import generate_input_dataset, generate_input_dataset_white_noise, generate_output_dataset
+from models import DeepLRU
 import scipy
 import os
 from os.path import dirname, join as pjoin
 import time
+
 from utils import set_params
-import math
-from argparse import Namespace
-from SSMs import DWN, DWNConfig
-#from tqdm import tqdm
+
 
 seed = 2
 torch.manual_seed(seed)
-
-# set up a simple architecture
-cfg = {
-    "n_u": 2,
-    "n_y": 4,
-    "d_model": 6,
-    "d_state": 5,
-    "n_layers": 3,
-    "ff": "LMLP",  # GLU | MLP | LMLP
-    "max_phase": math.pi,
-    "r_min": 0.7,
-    "r_max": 0.98,
-    "gamma": True,
-    "trainable": False,
-    "gain": 2.4
-}
-cfg = Namespace(**cfg)
-
-
-# Build model
-config = DWNConfig(d_model=cfg.d_model, d_state=cfg.d_state, n_layers=cfg.n_layers, ff=cfg.ff, rmin=cfg.r_min,
-                   rmax=cfg.r_max, max_phase=cfg.max_phase, gamma=cfg.gamma, trainable=cfg.trainable, gain=cfg.gain)
-Qg = DWN(cfg.n_u, cfg.n_y, config)
-
-total_params = sum(p.numel() for p in Qg.parameters())
-print(f"Number of parameters: {total_params}")
-
-np.random.seed(20)
-y_target = torch.zeros(4)
 
 # Parameters
 min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, alpha_ca, alpha_obst, n_xi, l, \
@@ -54,8 +24,12 @@ min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, 
 # Create the vehicle model
 vehicle = PointMassVehicle(mass, ts, drag_coefficient_1, drag_coefficient_2)
 
+#create the model Qg
+Qg = PsiU(input_dim, state_dim, n_xi, l)
+
 #Create the controller K
 #u = -Kd q
+y_target = torch.zeros(4)
 
 #Generate dataset
 input_data = generate_input_dataset(num_signals=num_signals, ts=ts, duration=duration, input_dim=input_dim)
@@ -65,6 +39,10 @@ output_data = generate_output_dataset(input_data, vehicle, initial_position, ini
 input_data_training = input_data[0:num_training, :, :]
 output_data_training = output_data[0:num_training, :, :]
 y_hat_train = torch.zeros(output_data_training.shape)
+
+total_params = sum(p.numel() for p in Qg.parameters())
+print(f"Number of parameters: {total_params}")
+
 
 # Initialize input (u) and output (y) tensors for validation data
 input_data_val = input_data[num_training:, :, :]
@@ -102,12 +80,10 @@ for epoch in range(epochs):
         for t in range(input_data_training.shape[1]):
             if t == 0:
                 u_K = torch.zeros(2)
-                state = None
+                xi_ = torch.zeros(Qg.n_xi)
             u_ext = input_data_training[n, t, :]
             u = u_ext #- u_K
-            u = u.view(1, 1, 2)  # Reshape input
-            y_hat, state = Qg(u, state=state, mode="loop")
-            y_hat = y_hat.squeeze(0).squeeze(0)
+            y_hat, xi_ = Qg.forward(t, u, xi_)
             u_K = torch.matmul(Kd, -y_hat[2:])
             loss = loss + MSE(output_data_training[n, t, :], y_hat[:])
             y_hat_train[n, t, :] = y_hat.detach()
@@ -116,6 +92,7 @@ for epoch in range(epochs):
     loss /= (input_data_training.shape[0] * input_data_training.shape[1])
     loss.backward()
     optimizer.step()
+    Qg.set_model_param()
 
     # Print training loss for this epoch
     print(f"Epoch: {epoch + 1} \t||\t Training Loss: {loss}||\t Time: {time.time() - t0}")
@@ -129,12 +106,10 @@ for epoch in range(epochs):
                 for t in range(input_data_val.shape[1]):
                     if t == 0:
                         u_K = torch.zeros(2)
-                        state = None
+                        xi_ = torch.zeros(Qg.n_xi)
                     u_ext = input_data_val[n, t, :]
                     u = u_ext #- u_K
-                    u = u.view(1, 1, 2)  # Reshape input
-                    y_hat, state = Qg(u, state=state, mode="loop")
-                    y_hat = y_hat.squeeze(0).squeeze(0)
+                    y_hat, xi_ = Qg.forward(t, u, xi_)
                     u_K = torch.matmul(Kd, -y_hat[2:])
                     val_loss = val_loss + MSE(output_data_val[n, t, :], y_hat[:])
                     if epoch == epochs - 1:
@@ -242,3 +217,50 @@ for i in range(2):
     plt.tight_layout()
 
 plt.show()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Start training timer
+t0 = time.time()
+for epoch in range(epochs):
+    # Adjust learning rate at specific epochs
+    if epoch == epochs - epochs / 2:
+        learning_rate = 1.0e-3
+        optimizer = torch.optim.Adam(Qg.parameters(), lr=learning_rate)
+    if epoch == epochs - epochs / 6:
+        learning_rate = 1.0e-3
+        optimizer = torch.optim.Adam(Qg.parameters(), lr=learning_rate)
+    optimizer.zero_grad()
+    loss = 0.0
+    for n in range(input_data_training.shape[0]):
+        xi_ = torch.zeros(Qg.n_xi)
+        for t in range(input_data.shape[1]):
+            if t == 0:
+                u_K = 0.
+            u_ext = (input_data[n, t, :])
+            u = u_ext - u_K
+            y_hat, xi_ = Qg.forward(t, u, xi_)
+            u_K = torch.matmul(Kd, -y_hat[:2])
+            #u_K = 0.03*(target_position-y_hat[0:2])
+            loss = loss + MSE(output_data[n,t,:], y_hat[:])
+            y_hat_train[n,t,:] = y_hat.detach()
+    loss.backward()
+    optimizer.step()
+    Qg.set_model_param()
+    # Print loss for each epoch
+    print(f"Epoch: {epoch + 1} \t||\t Loss: {loss}")
+    LOSS[epoch] = loss
