@@ -4,7 +4,6 @@ import numpy as np
 import matplotlib.pyplot as plt
 from models import PointMassVehicle
 from dataset import generate_input_dataset, generate_input_dataset_white_noise, generate_output_dataset
-from models import DeepLRU
 import scipy
 import os
 from os.path import dirname, join as pjoin
@@ -51,7 +50,7 @@ min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, 
 # Create the vehicle model
 vehicle = PointMassVehicle(mass, ts, drag_coefficient_1, drag_coefficient_2)
 
-#Generate dataset
+#Generate Dataset
 input_data = generate_input_dataset(num_signals=num_signals, ts=ts, duration=duration, input_dim=input_dim)
 output_data = generate_output_dataset(input_data, vehicle, initial_position, initial_velocity, Kp, Kd, target_position)
 
@@ -158,7 +157,6 @@ for t in range(1, input_data.shape[1]):
     positions_closed[t] = p
     velocities_closed[t] = q
 
-
 # Plotting the trajectories
 plt.figure(figsize=(12, 6))
 
@@ -236,7 +234,7 @@ plt.title("LOSS")
 plt.show()
 
 # Plot training and validation outputs for different output channels
-for idx in range(5):
+for idx in range(2):
     plt.figure(figsize=(12, 8))
     plt.subplot(2, 1, 1)
     plt.plot(time_plot, ySSM[idx, 0:len(time_plot), 0].detach().numpy(), label='SSM')

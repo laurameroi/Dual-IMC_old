@@ -22,7 +22,7 @@ min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, 
 # Create the vehicle model
 vehicle = PointMassVehicle(mass, ts, drag_coefficient_1, drag_coefficient_2)
 
-#Generate dataset
+#Generate Dataset
 input_data = generate_input_dataset(num_signals=num_signals, ts=ts, duration=duration, input_dim=input_dim)
 output_data = generate_output_dataset(input_data, vehicle, initial_position, initial_velocity, Kp, Kd, target_position)
 

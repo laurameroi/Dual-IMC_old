@@ -31,7 +31,7 @@ Qg = PsiU(input_dim, state_dim, n_xi, l)
 #u = -Kd q
 y_target = torch.zeros(4)
 
-#Generate dataset
+#Generate Dataset
 input_data = generate_input_dataset(num_signals=num_signals, ts=ts, duration=duration, input_dim=input_dim)
 output_data = generate_output_dataset(input_data, vehicle, initial_position, initial_velocity, Kp, Kd, target_position)
 
@@ -82,7 +82,7 @@ for epoch in range(epochs):
                 u_K = torch.zeros(2)
                 xi_ = torch.zeros(Qg.n_xi)
             u_ext = input_data_training[n, t, :]
-            u = u_ext #- u_K
+            u = u_ext - u_K
             y_hat, xi_ = Qg.forward(t, u, xi_)
             u_K = torch.matmul(Kd, -y_hat[2:])
             loss = loss + MSE(output_data_training[n, t, :], y_hat[:])
@@ -108,7 +108,7 @@ for epoch in range(epochs):
                         u_K = torch.zeros(2)
                         xi_ = torch.zeros(Qg.n_xi)
                     u_ext = input_data_val[n, t, :]
-                    u = u_ext #- u_K
+                    u = u_ext - u_K
                     y_hat, xi_ = Qg.forward(t, u, xi_)
                     u_K = torch.matmul(Kd, -y_hat[2:])
                     val_loss = val_loss + MSE(output_data_val[n, t, :], y_hat[:])
@@ -197,10 +197,6 @@ for idx in range(2):
     plt.show()
 
 
-# Print the final validation loss
-print(f"Loss Validation single SSM: {loss_val}")
-
-
 plt.figure(figsize=(12, 8))
 
 # Plot for each selected signal
@@ -218,49 +214,73 @@ for i in range(2):
 
 plt.show()
 
+#CLOSED LOOP FOR 1 TRAJECTORY WITH BASE P CONTROLLER
+# Initial conditions
+p = initial_position
+q = initial_velocity
+
+# Predefine tensors to store the results
+positions_closed = torch.zeros((input_data.shape[1], 2))  # Store all positions
+velocities_closed = torch.zeros((input_data.shape[1], 2))  # Store all velocities
+
+# Set initial conditions
+positions_closed[0] = p
+velocities_closed[0] = q
+
+for t in range(input_data.shape[1]):
+    u_K = torch.matmul(Kd, -q)
+    F = input_data[0, t, :] + u_K
+    # Compute next state using the forward dynamics
+    p, q = vehicle.base_forward(p, q, F, Kp, Kd, target_position)
+    positions_closed[t] = p
+    velocities_closed[t] = q
+
+#CLOSED LOOP with ESTIMATED MODEL
+
+# Initial conditions
+p = initial_position
+q = initial_velocity
+
+# Predefine tensors to store the results
+positions_closed_estimated_model = torch.zeros((input_data.shape[1], 2))  # Store all positions
 
 
+# Set initial conditions
+positions_closed_estimated_model[0] = p
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Start training timer
-t0 = time.time()
-for epoch in range(epochs):
-    # Adjust learning rate at specific epochs
-    if epoch == epochs - epochs / 2:
-        learning_rate = 1.0e-3
-        optimizer = torch.optim.Adam(Qg.parameters(), lr=learning_rate)
-    if epoch == epochs - epochs / 6:
-        learning_rate = 1.0e-3
-        optimizer = torch.optim.Adam(Qg.parameters(), lr=learning_rate)
-    optimizer.zero_grad()
-    loss = 0.0
-    for n in range(input_data_training.shape[0]):
+for t in range(input_data.shape[1]):
+    if t == 0:
+        u_K = torch.zeros(2)
         xi_ = torch.zeros(Qg.n_xi)
-        for t in range(input_data.shape[1]):
-            if t == 0:
-                u_K = 0.
-            u_ext = (input_data[n, t, :])
-            u = u_ext - u_K
-            y_hat, xi_ = Qg.forward(t, u, xi_)
-            u_K = torch.matmul(Kd, -y_hat[:2])
-            #u_K = 0.03*(target_position-y_hat[0:2])
-            loss = loss + MSE(output_data[n,t,:], y_hat[:])
-            y_hat_train[n,t,:] = y_hat.detach()
-    loss.backward()
-    optimizer.step()
-    Qg.set_model_param()
-    # Print loss for each epoch
-    print(f"Epoch: {epoch + 1} \t||\t Loss: {loss}")
-    LOSS[epoch] = loss
+    u_ext = input_data_val[n, t, :]
+    u = u_ext - u_K
+    y_hat, xi_ = Qg.forward(t, u, xi_)
+    u_K = torch.matmul(Kd, -y_hat[2:])
+    u_ext = u_ext + u_K
+    p, q = y_hat[0:2], y_hat[2:]
+    positions_closed_estimated_model[t] = p
+
+# Plotting the trajectories
+plt.figure(figsize=(12, 6))
+
+# Plot closed-loop trajectory
+plt.subplot(1, 2, 1)
+plt.plot(positions_closed[:, 0], positions_closed[:, 1], label="closed-loop trajectory")
+plt.scatter(positions_closed[0, 0], positions_closed[0, 1], color='red', label="Start")
+plt.scatter(positions_closed[-1, 0], positions_closed[-1, 1], color='green', label="End")
+plt.title("Open-loop Trajectory")
+plt.xlabel("X position (m)")
+plt.ylabel("Y position (m)")
+plt.legend()
+
+# Plot closed-loop trajectory with estimated model
+plt.subplot(1, 2, 2)
+plt.plot(positions_closed_estimated_model[:, 0].detach().numpy(), positions_closed_estimated_model[:, 1].detach().numpy(), label="Closed-loop trajectory with estimated model")
+plt.scatter(positions_closed_estimated_model[0, 0].detach().numpy(), positions_closed_estimated_model[0, 1].detach().numpy(), color='red', label="Start")
+plt.scatter(positions_closed_estimated_model[-1, 0].detach().numpy(), positions_closed_estimated_model[-1, 1].detach().numpy(), color='green', label="End")
+plt.title("Closed-loop Trajectory")
+plt.xlabel("X position (m)")
+plt.ylabel("Y position (m)")
+plt.legend()
+
+plt.show()

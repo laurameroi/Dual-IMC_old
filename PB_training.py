@@ -1,114 +1,64 @@
+"""
+Train an acyclic REN controller for the system of 2 robots in a corridor or 12 robots swapping positions.
+Author: Clara Galimberti (clara.galimberti@epfl.ch)
+Usage:
+python run.py                --sys_model     [SYS_MODEL]         \
+                             --gpu           [USE_GPU]           \
+Flags:
+  --sys_model: select system where to design a controller. Available options: corridor, robots.
+  --gpu: whether to use GPU.
+"""
+
 import torch
-from torch import nn
-import numpy as np
-import matplotlib.pyplot as plt
-from models import PointMassVehicle
-from dataset import generate_input_dataset
-from dataset import generate_input_dataset_white_noise
-from models import DeepLRU
-import scipy
-import os
-from os.path import dirname, join as pjoin
-import time
-
-np.random.seed(20)
+import argparse
+from models import PointMassVehicle, PsiU
+from src.loss_functions import f_loss_states, f_loss_u, f_loss_ca, f_loss_obst
+from utils import set_params
 
 
+seed = 2
+torch.manual_seed(seed)
 
+# Parameters
+min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, alpha_ca, alpha_obst, n_xi, l, \
+    n_traj, std_ini, mass, ts, drag_coefficient_1, drag_coefficient_2, initial_position, initial_velocity, \
+    target_position, input_dim, state_dim, Kp, Kd, duration, num_signals, num_training, num_validation = set_params()
 
+# Create the vehicle model
+vehicle = PointMassVehicle(mass, ts, drag_coefficient_1, drag_coefficient_2)
 
+#create the controller M
+M = PsiU(state_dim, input_dim, n_xi, l)
 
+y_target = torch.zeros(4)
 
+optimizer = torch.optim.Adam(M.parameters(), lr=learning_rate)
 
-
-
-
-
-
-
-
-
-
-#training and validation dataset dimensions
-num_training = int(num_signals*4/5)
-num_validation = num_signals-num_training
-
-# Initialize input (u) and output (y) tensors for training data
-u = input_data[0:num_training, :, :]
-y = output_data[0:num_training, :, 0:2]
-
-# Define the SSM model parameters
-idd = input_dim # Input dimension
-hdd = 30  # Hidden state dimension
-odd = 2  # Output dimension
-
-# Initialize the DeepLRU model (SSM)
-SSM = (DeepLRU
-       (N=1,
-        in_features=idd,
-        out_features=odd,
-        mid_features=11,
-        state_features=hdd,
-        ))
-
-# Define the loss function
-MSE = nn.MSELoss()
-
-# Define the optimizer and learning rate
-learning_rate = 1.0e-2
-optimizer = torch.optim.Adam(SSM.parameters(), lr=learning_rate)
-optimizer.zero_grad()
-
-# Training loop settings
-epochs = 1500
-LOSS = np.zeros(epochs)
-
-# Start training timer
-t0 = time.time()
 for epoch in range(epochs):
-    # Adjust learning rate at specific epochs
-    if epoch == epochs - epochs / 2:
-        learning_rate = 1.0e-3
-        optimizer = torch.optim.Adam(SSM.parameters(), lr=learning_rate)
-    if epoch == epochs - epochs / 6:
-        learning_rate = 1.0e-3
-        optimizer = torch.optim.Adam(SSM.parameters(), lr=learning_rate)
+    optimizer.zero_grad()
+    loss = 0
+    '''
+    if epoch == 300 and sys_model == 'corridor':
+        std_ini = 0.5
+        optimizer.param_groups[0]['lr'] = optimizer.param_groups[0]['lr']
+    '''
 
-    optimizer.zero_grad()  # Reset gradients
-    loss = 0  # Initialize loss
+    for n in range(input_data_training.shape[0]):
+        for t in range(input_data_training.shape[1]):
+            if t == 0:
+                xi_ = torch.zeros(Qg.n_xi)
+                w = (x0.detach() - sys.xbar) + std_ini * torch.randn(x0.shape)
+                u = torch.zeros(input_dim)
+                x = sys.xbar
+            x, _ = PointMassVehicle.base_forward(t, x, u, w)
+            w = x - xxxxx
+            u, xi_ = M.forward(t, w, xi_)
+            loss = loss + MSE(output_data_training[n, t, :], y_hat[:])
 
-    # Forward pass through the SSM
-    ySSM = SSM(u)
-    ySSM = torch.squeeze(ySSM)  # Remove unnecessary dimensions
 
-    # Calculate the mean squared error loss
-    loss = MSE(ySSM, y)
-    loss.backward()  # Backpropagate to compute gradients
-
-    # Update model parameters
+    print("Epoch: %i --- Loss: %.4f ---" % (epoch, loss / t_end))
+    loss.backward()
     optimizer.step()
-
-    # Print loss for each epoch
-    print(f"Epoch: {epoch + 1} \t||\t Loss: {loss}")
-    LOSS[epoch] = loss
-
-# End training timer
-t1 = time.time()
-
-# Calculate total training time
-total_time = t1 - t0
-
-# Initialize input (u) and output (y) tensors for training data
-uval = input_data[num_training:, :, :]
-yval = output_data[num_training:, :, 0:2]
-
-
-# Forward pass through the SSM for validation data
-ySSM_val = SSM(uval)
-ySSM_val = torch.squeeze(ySSM_val)
-yval = torch.squeeze(yval)
-
-# Compute validation loss
-loss_val = MSE(ySSM_val, yval)
-
-
+    ctl.psi_u.set_model_param()
+    # # # # # # # # Save trained model # # # # # # # #
+    torch.save(ctl.psi_u.state_dict(), "trained_models/" + sys_model + "_tmp.pt")

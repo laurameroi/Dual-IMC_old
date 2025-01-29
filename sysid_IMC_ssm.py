@@ -23,7 +23,7 @@ cfg = {
     "n_y": 4,
     "d_model": 6,
     "d_state": 5,
-    "n_layers": 3,
+    "n_layers": 1,
     "ff": "LMLP",  # GLU | MLP | LMLP
     "max_phase": math.pi,
     "r_min": 0.7,
@@ -57,7 +57,7 @@ vehicle = PointMassVehicle(mass, ts, drag_coefficient_1, drag_coefficient_2)
 #Create the controller K
 #u = -Kd q
 
-#Generate dataset
+#Generate Dataset
 input_data = generate_input_dataset(num_signals=num_signals, ts=ts, duration=duration, input_dim=input_dim)
 output_data = generate_output_dataset(input_data, vehicle, initial_position, initial_velocity, Kp, Kd, target_position)
 
@@ -104,7 +104,7 @@ for epoch in range(epochs):
                 u_K = torch.zeros(2)
                 state = None
             u_ext = input_data_training[n, t, :]
-            u = u_ext #- u_K
+            u = u_ext - u_K
             u = u.view(1, 1, 2)  # Reshape input
             y_hat, state = Qg(u, state=state, mode="loop")
             y_hat = y_hat.squeeze(0).squeeze(0)
@@ -131,7 +131,7 @@ for epoch in range(epochs):
                         u_K = torch.zeros(2)
                         state = None
                     u_ext = input_data_val[n, t, :]
-                    u = u_ext #- u_K
+                    u = u_ext - u_K
                     u = u.view(1, 1, 2)  # Reshape input
                     y_hat, state = Qg(u, state=state, mode="loop")
                     y_hat = y_hat.squeeze(0).squeeze(0)
@@ -220,10 +220,6 @@ for idx in range(2):
     plt.title("Output Val Single SSM")
     plt.legend()
     plt.show()
-
-
-# Print the final validation loss
-print(f"Loss Validation single SSM: {loss_val}")
 
 
 plt.figure(figsize=(12, 8))

@@ -211,7 +211,7 @@ class LRU(nn.Module):
 
         # y = (inner_states @ self.C.T).real + input_sequences * self.D
         y = (inner_states @ C.T).real + input @ D.T
-        return y
+        return y, inner_states
 
     def forward(self, input, gamma=None, state=None, mode="scan"):
 

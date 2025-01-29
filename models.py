@@ -15,7 +15,7 @@ class PointMassVehicle(nn.Module):
     def drag_force(self, q):
         """Compute the drag force given the velocity q."""
         # Nonlinear drag: C(q) = b * |q|^2
-        drag = self.b2 * torch.norm(q) ** 2
+        #drag = self.b2 * torch.norm(q) ** 2
         # Nonlinear drag: C(q) = b1 +  b2 * |q|
         drag = self.b1 + self.b2 * torch.norm(q)
         # Drag function: C(q) = b1 * |q| - b2 * tanh(|q|)

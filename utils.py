@@ -19,8 +19,8 @@ def set_params():
     Kd = torch.tensor([[4, 0.0], [0.0, 4]])
 
     #Dataset
-    duration = 50
-    num_signals = 10
+    duration = 5
+    num_signals = 100
     num_training = int(num_signals * 4 / 5)
     num_validation = num_signals - num_training
 
@@ -39,8 +39,8 @@ def set_params():
     alpha_u = 0.1  # Regularization parameter for penalizing the input
     alpha_ca = 100
     alpha_obst = 5e3
-    n_xi = 32  # \xi dimension -- number of states of REN
-    l = 32  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
+    n_xi = 10  # \xi dimension -- number of states of REN
+    l = 10  # dimension of the square matrix D11 -- number of _non-linear layers_ of the REN
     n_traj = 5  # number of trajectories collected at each step of the learning
     std_ini = 0.2  # standard deviation of initial conditions
     return min_dist, t_end, n_agents, x0, xbar, linear, learning_rate, epochs, Q, alpha_u, alpha_ca, alpha_obst, n_xi, \
